@@ -3,6 +3,7 @@
 namespace Susheelhbti\LaravelUserAdmin\Http\Controllers\Admin;
 
 use Illuminate\Routing\Controller;
+use Susheelhbti\LaravelUserAdmin\Events\UserAdminEvents;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -84,6 +85,12 @@ class UserManagementController extends Controller
 
         $this->log(auth()->id(), $user->id, 'create_user', $request->only(['name', 'email', 'role']));
 
+        UserAdminEvents::fire(UserAdminEvents::USER_CREATED, [
+            'user_id' => $user->id,
+            'email'   => $user->email,
+            'source'  => 'admin',
+        ]);
+
         return response()->json([
             'message' => 'User created successfully.',
             'user'    => new UserResource($user->load('otpRoles')),
@@ -159,11 +166,25 @@ class UserManagementController extends Controller
 
     public function unsuspend($userId)
     {
-        $user = $this->findUser($userId);
+        $user        = $this->findUser($userId);
+        $wasArchived = $user->status === 'archived';
 
         $user->update(['status' => 'active', 'suspended_until' => null]);
 
         $this->log(auth()->id(), $user->id, 'unsuspend_user');
+
+        // Bug #9 fix — fire USER_UNARCHIVED when restoring an archived user
+        if ($wasArchived) {
+            UserAdminEvents::fire(UserAdminEvents::USER_UNARCHIVED, [
+                'user_id' => $user->id,
+                'email'   => $user->email,
+            ]);
+        } else {
+            UserAdminEvents::fire(UserAdminEvents::USER_UNSUSPENDED, [
+                'user_id' => $user->id,
+                'email'   => $user->email,
+            ]);
+        }
 
         return response()->json(['message' => 'User unsuspended successfully.']);
     }
@@ -451,6 +472,7 @@ class UserManagementController extends Controller
             'action'         => $action,
             'details'        => $details,
             'ip_address'     => request()->ip(),
+            'request_id'     => request()->header('X-Request-ID', uniqid('req_', true)),
         ]);
     }
 }

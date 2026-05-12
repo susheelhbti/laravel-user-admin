@@ -1,26 +1,19 @@
 <?php
 
 return [
-    /*
-    |--------------------------------------------------------------------------
-    | Route Registration
-    |--------------------------------------------------------------------------
-    | Set to false if you want to define your own routes instead of using
-    | the package's built-in routes.
-    */
-    'register_routes' => true,
 
     /*
     |--------------------------------------------------------------------------
-    | Route Prefix & Middleware
+    | Route registration
     |--------------------------------------------------------------------------
     */
-    'route_prefix' => 'api',
-    'route_middleware' => [],
+    'register_routes'   => true,
+    'route_prefix'      => 'api',
+    'route_middleware'  => [],
 
     /*
     |--------------------------------------------------------------------------
-    | OTP Settings
+    | OTP settings
     |--------------------------------------------------------------------------
     */
     'otp' => [
@@ -33,45 +26,131 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | User Model
-    |--------------------------------------------------------------------------
-    | The model used for users. Must use Laravel's Authenticatable contract.
-    */
-    'user_model' => \App\Models\User::class,
-
-    /*
-    |--------------------------------------------------------------------------
-    | Default Role for Auto-Registered Users
+    | User model + default roles
     |--------------------------------------------------------------------------
     */
+    'user_model'        => \App\Models\User::class,
     'default_role_slug' => 'user',
+    'admin_role_slug'   => 'admin',
+    'token_name'        => 'auth_token',
+    'auto_register'     => true,
+    'per_page'          => 15,
 
     /*
     |--------------------------------------------------------------------------
-    | Admin Role Slug
+    | Refresh token rotation
     |--------------------------------------------------------------------------
     */
-    'admin_role_slug' => 'admin',
+    'refresh_token' => [
+        'ttl_days' => 30,
+    ],
 
     /*
     |--------------------------------------------------------------------------
-    | Sanctum Token Name
+    | Trusted device TTL (days)
     |--------------------------------------------------------------------------
     */
-    'token_name' => 'auth_token',
+    'trusted_device_ttl_days' => 90,
 
     /*
     |--------------------------------------------------------------------------
-    | Auto Registration
+    | Account deletion grace period
     |--------------------------------------------------------------------------
-    | When a user verifies OTP and no account exists, auto-create one.
     */
-    'auto_register' => true,
+    'account_deletion_grace_days' => 7,
 
     /*
     |--------------------------------------------------------------------------
-    | Pagination
+    | TOTP 2FA  (requires: composer require pragmarx/google2fa)
     |--------------------------------------------------------------------------
     */
-    'per_page' => 15,
+    'two_factor' => [
+        'enabled' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Security questions
+    |--------------------------------------------------------------------------
+    */
+    'security_questions' => [
+        'required' => 2,
+        'bank'     => [
+            'What was the name of your first pet?',
+            'What city were you born in?',
+            'What was your childhood nickname?',
+            'What is the name of your oldest sibling?',
+            'What was the make of your first car?',
+            "What is your mother's maiden name?",
+            'What elementary school did you attend?',
+            'What is the name of the street you grew up on?',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Geolocation & IP intelligence
+    |
+    | blocked_countries : ISO-3166-1 alpha-2 codes, e.g. ['CN','RU','KP']
+    | anomaly_action    : 'warn' (fire event, allow login) | 'block'
+    | anomaly_speed_kmh : threshold for impossible-travel detection
+    |--------------------------------------------------------------------------
+    */
+    'geo' => [
+        'blocked_countries'    => [],
+        'check_ip_reputation'  => false,   // uses StopForumSpam API (free)
+        'anomaly_detection'    => true,
+        'anomaly_action'       => 'warn',
+        'anomaly_speed_kmh'    => 900,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Conditional authentication rules
+    |
+    | Conditions: failed_logins | time_window | role | ip_country
+    | Actions   : allow | require_2fa | require_captcha | block | suspend
+    |--------------------------------------------------------------------------
+    */
+    'auth_rules' => [
+        // ['condition' => ['type' => 'failed_logins', 'threshold' => 5], 'action' => 'require_captcha'],
+        // ['condition' => ['type' => 'failed_logins', 'threshold' => 10], 'action' => 'suspend'],
+        // ['condition' => ['type' => 'time_window', 'start' => '09:00', 'end' => '17:00', 'invert' => true], 'action' => 'block'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Webhooks
+    |--------------------------------------------------------------------------
+    */
+    'webhooks' => [
+        'enabled'      => true,
+        'max_attempts' => 5,     // max delivery attempts with exponential backoff
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | User lifecycle
+    |--------------------------------------------------------------------------
+    */
+    'lifecycle' => [
+        'archive_after_inactive_days' => 180,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Profile completion score
+    | Define fields and their point values (must sum to 100)
+    |--------------------------------------------------------------------------
+    */
+    'profile_score' => [
+        'fields' => [
+            'name'     => 25,
+            'email'    => 25,
+            'phone'    => 20,
+            'avatar'   => 15,
+            'bio'      => 15,
+        ],
+    ],
+
 ];

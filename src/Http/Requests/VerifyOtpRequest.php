@@ -11,8 +11,11 @@ class VerifyOtpRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'otp_id' => 'required|integer|exists:otpguard_otps,id',
-            'code'   => 'required|string|size:' . config('user_admin.otp.code_length', 6),
+            'otp_id'      => 'required|integer|exists:otpguard_otps,id',
+            'code'        => 'required|string|size:' . config('user_admin.otp.code_length', 6),
+            // Optional 2FA fields — submitted on the second pass
+            'totp_token'  => 'nullable|string|size:6',
+            'backup_code' => 'nullable|string',
         ];
     }
 }

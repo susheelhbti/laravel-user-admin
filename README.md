@@ -1,28 +1,42 @@
-# Laravel OTP Guard
+<div align="center">
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/susheelhbti/laravel-user-admin.svg)](https://packagist.org/packages/susheelhbti/laravel-user-admin)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+# 🔐 laravel-user-admin
 
-A production-ready Laravel package that adds **OTP-based authentication** (with auto-registration) and a **full admin user-management REST API** to any Laravel application.
+**OTP-based authentication + full admin user-management REST API for Laravel**
 
-## Features
+[![Packagist](https://img.shields.io/packagist/v/susheelhbti/laravel-user-admin.svg)](https://packagist.org/packages/susheelhbti/laravel-user-admin)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PHP](https://img.shields.io/badge/php-%3E%3D8.1-brightgreen)](https://php.net)
+[![Laravel](https://img.shields.io/badge/laravel-10%20%7C%2011-red)](https://laravel.com)
+
+---
+
+**Author: Susheel Kumar** — available for **freelance & full-time** roles.
+📧 [susheelhbti@gmail.com](mailto:susheelhbti@gmail.com)
+
+</div>
+
+## ✨ Features
 
 - 📧 Email OTP login with auto user registration
-- 🔐 Laravel Sanctum token authentication
+- 🔐 Sanctum access token + **refresh token rotation** with reuse detection
 - 👥 Role & permission system (RBAC)
+- 🔒 **TOTP two-factor authentication** + backup codes
+- 📱 **Trusted device management** — skip 2FA on trusted devices
 - 🛡️ Admin API — suspend, ban, impersonate, bulk actions
-- 📊 Login history & admin audit logs
-- 📤 CSV user export
-- ⚙️ Fully configurable via `config/user_admin.php`
-- 🧩 Zero-conflict table naming (`otpguard_*` prefix)
+- 📊 Login history & admin audit logs with **Request IDs**
+- 📤 CSV user export + 📥 **Bulk CSV/JSON import**
+- 🗑️ **Account deletion with grace period**
+- 🎉 **30+ named events** for Slack, webhooks, Datadog
+- ❤️ **Health check** endpoint
+- ⚙️ Fully configurable
 
 ---
 
 ## Requirements
 
-- PHP 8.1+
-- Laravel 10 or 11
-- Laravel Sanctum 3 or 4
+- PHP 8.1+, Laravel 10 or 11, Laravel Sanctum 3+
+- *(Optional)* `pragmarx/google2fa` for TOTP 2FA
 
 ---
 
@@ -32,11 +46,9 @@ A production-ready Laravel package that adds **OTP-based authentication** (with 
 composer require susheelhbti/laravel-user-admin
 ```
 
-### 1. Add the trait to your User model
+Add trait to your User model:
 
 ```php
-// app/Models/User.php
-
 use Susheelhbti\LaravelUserAdmin\Traits\HasUserAdmin;
 
 class User extends Authenticatable
@@ -44,217 +56,157 @@ class User extends Authenticatable
     use HasUserAdmin;
 
     protected $casts = [
-        'suspended_until'    => 'datetime',
-        'last_login_at'      => 'datetime',
-        'two_factor_enabled' => 'boolean',
-        // ...
+        'suspended_until'       => 'datetime',
+        'last_login_at'         => 'datetime',
+        'two_factor_enabled'    => 'boolean',
+        'deletion_requested_at' => 'datetime',
+        'deletion_scheduled_at' => 'datetime',
     ];
 }
 ```
 
-### 2. Publish and run migrations
+Run migrations:
 
 ```bash
 php artisan vendor:publish --tag=laravel-user-admin-migrations
 php artisan migrate
 ```
 
-### 3. Publish config (optional)
-
-```bash
-php artisan vendor:publish --tag=laravel-user-admin-config
-```
-
-### 4. Seed default roles & permissions (optional)
+Seed roles and permissions:
 
 ```bash
 php artisan db:seed --class="Susheelhbti\\LaravelUserAdmin\\Database\\Seeders\\LaravelUserAdminSeeder"
 ```
 
-Or call it from your `DatabaseSeeder`:
+Schedule commands (Laravel 11 `routes/console.php`):
 
 ```php
-$this->call(\Susheelhbti\LaravelUserAdmin\Database\Seeders\LaravelUserAdminSeeder::class);
-```
-
-### 5. Schedule OTP cleanup
-
-In `app/Console/Kernel.php` (Laravel 10) or `routes/console.php` (Laravel 11):
-
-```php
-// Laravel 11 — routes/console.php
 Schedule::command('user-admin:clean-otps')->everyFifteenMinutes();
-```
-
----
-
-## Configuration
-
-After publishing, edit `config/user_admin.php`:
-
-```php
-return [
-    'register_routes'   => true,       // Set false to define your own routes
-    'route_prefix'      => 'api',
-    'route_middleware'  => [],
-
-    'otp' => [
-        'expires_in_minutes' => 5,
-        'max_attempts'       => 3,
-        'rate_limit_count'   => 3,
-        'rate_limit_minutes' => 5,
-        'code_length'        => 6,
-    ],
-
-    'user_model'        => \App\Models\User::class,
-    'default_role_slug' => 'user',
-    'admin_role_slug'   => 'admin',
-    'token_name'        => 'auth_token',
-    'auto_register'     => true,
-    'per_page'          => 15,
-];
+Schedule::command('user-admin:purge-accounts')->daily();
 ```
 
 ---
 
 ## API Endpoints
 
-### Authentication
+### General
+| GET | `/api/health` | DB status + version |
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/auth/otp/send` | — | Send OTP to email |
-| POST | `/api/auth/otp/verify` | — | Verify OTP, receive token |
-| POST | `/api/auth/logout` | Bearer | Revoke current token |
-| GET | `/api/auth/me` | Bearer | Get current user |
+### Auth
+| POST | `/api/auth/otp/send` | Send OTP |
+| POST | `/api/auth/otp/verify` | Verify OTP → access + refresh tokens |
+| POST | `/api/auth/logout` | Revoke all tokens |
+| GET  | `/api/auth/me` | Current user |
+| POST | `/api/auth/token/refresh` | Rotate tokens |
+
+### 2FA
+| GET  | `/api/auth/2fa/setup` | Generate TOTP secret + QR |
+| POST | `/api/auth/2fa/confirm` | Enable 2FA |
+| POST | `/api/auth/2fa/disable` | Disable 2FA |
+| POST | `/api/auth/2fa/backup-codes/regenerate` | New backup codes |
+
+**2FA login flow** — on first verify when 2FA is enabled:
+```json
+{ "requires_2fa": true, "otp_id": 42, "message": "Two-factor authentication required." }
+```
+Re-submit with `totp_token` OR `backup_code` — no separate endpoint needed.
+
+### Trusted Devices
+| GET    | `/api/auth/devices` | List |
+| POST   | `/api/auth/devices/trust` | Mark trusted |
+| DELETE | `/api/auth/devices/{id}` | Revoke one |
+| DELETE | `/api/auth/devices` | Revoke all |
+
+### Account Deletion
+| POST | `/api/auth/account/request-deletion` | Schedule deletion |
+| POST | `/api/auth/account/cancel-deletion` | Cancel |
 
 ### Admin — Users
+| GET    | `/api/admin/users` | List (filter: status, role, search) |
+| POST   | `/api/admin/users` | Create |
+| GET    | `/api/admin/users/{id}` | Detail |
+| PUT    | `/api/admin/users/{id}` | Update |
+| DELETE | `/api/admin/users/{id}` | Hard delete |
+| DELETE | `/api/admin/users/{id}/soft` | Soft delete |
+| GET    | `/api/admin/users/export` | CSV download |
+| POST   | `/api/admin/users/import` | Bulk CSV/JSON import |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/users` | List users (filters: `status`, `role`, `search`, `sort_by`, `sort_direction`) |
-| POST | `/api/admin/users` | Create user |
-| GET | `/api/admin/users/{id}` | Get user |
-| PUT | `/api/admin/users/{id}` | Update user |
-| DELETE | `/api/admin/users/{id}` | Permanently delete user |
-| DELETE | `/api/admin/users/{id}/soft` | Soft delete user |
-| GET | `/api/admin/users/export` | Download CSV |
-
-### Admin — User Actions
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/admin/users/{id}/suspend` | Suspend user |
-| POST | `/api/admin/users/{id}/unsuspend` | Unsuspend user |
-| POST | `/api/admin/users/{id}/temporary-ban` | Temporary ban (requires `suspended_until`) |
-| POST | `/api/admin/users/{id}/force-password-reset` | Force password reset |
+### Admin — Actions
+| POST | `/api/admin/users/{id}/suspend` | Suspend |
+| POST | `/api/admin/users/{id}/unsuspend` | Unsuspend |
+| POST | `/api/admin/users/{id}/temporary-ban` | Temp ban |
+| POST | `/api/admin/users/{id}/force-password-reset` | Force reset |
 | POST | `/api/admin/users/{id}/remove-2fa` | Remove 2FA |
-| POST | `/api/admin/users/{id}/terminate-sessions` | Revoke all tokens |
-| GET | `/api/admin/users/{id}/login-history` | Login history |
-| POST | `/api/admin/users/{id}/impersonate` | Impersonate user |
-| POST | `/api/admin/users/stop-impersonation` | Stop impersonation |
+| POST | `/api/admin/users/{id}/terminate-sessions` | Kill sessions |
+| GET  | `/api/admin/users/{id}/login-history` | Login log |
+| POST | `/api/admin/users/{id}/impersonate` | Impersonate |
+| POST | `/api/admin/users/stop-impersonation` | Stop |
 
-### Admin — Bulk Operations
+### Admin — Bulk
+| POST | `/api/admin/users/bulk/suspend` | Bulk suspend |
+| POST | `/api/admin/users/bulk/unsuspend` | Bulk unsuspend |
+| POST | `/api/admin/users/bulk/assign-role` | Bulk role |
+| POST | `/api/admin/users/bulk/delete` | Bulk delete |
 
-| Method | Endpoint | Body |
-|--------|----------|------|
-| POST | `/api/admin/users/bulk/suspend` | `{ user_ids: [...] }` |
-| POST | `/api/admin/users/bulk/unsuspend` | `{ user_ids: [...] }` |
-| POST | `/api/admin/users/bulk/assign-role` | `{ user_ids: [...], role: "moderator" }` |
-| POST | `/api/admin/users/bulk/delete` | `{ user_ids: [...] }` |
-
-### Admin — Stats & Logs
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/statistics` | User stats |
-| GET | `/api/admin/admin-logs` | Admin audit log |
+### Admin — Stats
+| GET | `/api/admin/statistics` | Counts by status/role |
+| GET | `/api/admin/admin-logs` | Audit log |
 
 ---
 
-## Usage Examples
+## 🎉 Event System
 
-### Send OTP
+```php
+use Susheelhbti\LaravelUserAdmin\Events\UserAdminEvents;
+use Illuminate\Support\Facades\Event;
 
-```bash
-curl -X POST http://your-app.test/api/auth/otp/send \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com"}'
+Event::listen(UserAdminEvents::LOGIN_SUCCESS, function (string $e, array $data) {
+    logger("Login: {$data['email']} from {$data['ip']}");
+});
+
+Event::listen(UserAdminEvents::TOKEN_REUSE_DETECTED, function (string $e, array $data) {
+    SlackAlert::send("Token reuse attack for user #{$data['user_id']}!");
+});
+
+Event::listen(UserAdminEvents::USER_CREATED, function (string $e, array $data) {
+    CrmService::createContact($data['email']);
+});
 ```
 
-Response:
-```json
-{ "message": "OTP sent successfully.", "otp_id": 42 }
-```
+Every payload contains `event`, `fired_at`, `request_id`.
 
-### Verify OTP
-
-```bash
-curl -X POST http://your-app.test/api/auth/otp/verify \
-  -H "Content-Type: application/json" \
-  -d '{"otp_id": 42, "code": "381920"}'
-```
-
-Response:
-```json
-{
-  "message": "Login successful.",
-  "token": "1|abc123...",
-  "user": { "id": 1, "email": "user@example.com", "roles": ["user"] }
-}
-```
-
-### Suspend a user (Admin)
-
-```bash
-curl -X POST http://your-app.test/api/admin/users/5/suspend \
-  -H "Authorization: Bearer {admin_token}" \
-  -H "Content-Type: application/json" \
-  -d '{"suspended_until":"2026-07-01T00:00:00Z","reason":"Terms violation","notify":true}'
-```
+**All events:** `OTP_SENT`, `OTP_VERIFIED`, `OTP_FAILED`, `LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`, `TOKEN_REFRESHED`, `TOKEN_REUSE_DETECTED`, `TFA_ENABLED`, `TFA_DISABLED`, `TFA_FAILED`, `DEVICE_TRUSTED`, `DEVICE_REVOKED`, `SESSIONS_TERMINATED`, `USER_CREATED`, `USER_UPDATED`, `USER_DELETED`, `USER_SUSPENDED`, `USER_UNSUSPENDED`, `ACCOUNT_DELETION_REQUESTED`, `ACCOUNT_DELETION_COMPLETED`, `ACCOUNT_DELETION_CANCELLED`, `ADMIN_ACTION`, `IMPERSONATION_STARTED`, `IMPERSONATION_STOPPED`, `BULK_USERS_IMPORTED`, `BULK_USERS_SUSPENDED`, `BULK_USERS_DELETED`, `BULK_ROLE_ASSIGNED`, `EMAIL_SENT`, `EMAIL_FAILED`
 
 ---
 
 ## Middleware
 
-The package registers two middleware aliases:
-
-- `user-admin.admin` — Requires the user to have the admin role (configurable via `admin_role_slug`)
-- `user-admin.role:{slug}` — Requires the user to have a specific role
-
-You can apply them to your own routes:
-
 ```php
-Route::get('/dashboard', DashboardController::class)
-    ->middleware(['auth:sanctum', 'user-admin.admin']);
+Route::get('/dashboard', fn() => ...)->middleware(['auth:sanctum', 'user-admin.admin']);
+Route::get('/mod-panel', fn() => ...)->middleware(['auth:sanctum', 'user-admin.role:moderator']);
 ```
 
 ---
 
-## Disabling Built-in Routes
-
-Set `register_routes => false` in the config and define your own:
-
-```php
-use Susheelhbti\LaravelUserAdmin\Http\Controllers\Auth\OtpController;
-use Susheelhbti\LaravelUserAdmin\Http\Controllers\Admin\UserManagementController;
-
-Route::post('login/send', [OtpController::class, 'sendOtp']);
-Route::post('login/verify', [OtpController::class, 'verifyOtp']);
-```
-
----
-
-## Customising Email Views
+## Optional TOTP 2FA
 
 ```bash
-php artisan vendor:publish --tag=laravel-user-admin-views
+composer require pragmarx/google2fa
 ```
 
-Views will be published to `resources/views/vendor/laravel-user-admin/emails/`.
+No extra configuration — auto-enabled once installed.
+
+---
+
+## Artisan Commands
+
+| Command | Schedule |
+|---------|----------|
+| `user-admin:clean-otps` | Every 15 min |
+| `user-admin:purge-accounts` | Daily |
 
 ---
 
 ## License
 
-MIT © Susheel Kumar
+MIT © [Susheel Kumar](mailto:susheelhbti@gmail.com)

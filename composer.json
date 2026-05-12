@@ -50,5 +50,9 @@
         "test": "vendor/bin/pest"
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "version": "2.0.0",
+    "suggest": {
+        "pragmarx/google2fa": "Required for TOTP two-factor authentication support."
+    }
 }
